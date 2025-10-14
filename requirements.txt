@@ -1,0 +1,21 @@
+# Azure AI and Agent Framework
+azure-ai-projects==1.0.0b1
+azure-identity==1.19.0
+azure-ai-inference==1.0.0b5
+
+# Microsoft Agent Framework
+semantic-kernel==1.12.0
+
+# UI
+streamlit==1.39.0
+streamlit-extras==0.4.7
+
+# Utilities
+python-dotenv==1.0.1
+Pillow==10.4.0
+PyPDF2==3.0.1
+
+# Infrastructure as Code
+pulumi==3.136.1
+pulumi-azure-native==2.58.0
+pulumi-azuread==5.53.5
