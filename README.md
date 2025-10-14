@@ -6,28 +6,28 @@ A production-ready Azure AI Agent for document OCR using Mistral OCR, built with
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                  Streamlit UI                        │
-│              (User Interface)                        │
+│                  Streamlit UI                       │
+│              (User Interface)                       │
 └─────────────────┬───────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────┐
-│            Document OCR Agent                        │
-│     (Microsoft Agent Framework)                      │
+│            Document OCR Agent                       │
+│     (Microsoft Agent Framework)                     │
 └─────────────────┬───────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────┐
-│          Mistral OCR Model                           │
-│        (Azure AI Foundry)                            │
+│          Mistral OCR Model                          │
+│        (Azure AI Foundry)                           │
 └─────────────────────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────┐
-│       Azure Infrastructure                           │
+│       Azure Infrastructure                          │
 │  (Deployed via Pulumi IaC)                          │
-│  - AI Hub & Project                                  │
-│  - AI Services                                       │
+│  - AI Hub & Project                                 │
+│  - AI Services                                      │
 │  - Storage, Key Vault, etc.                         │
 └─────────────────────────────────────────────────────┘
 ```
@@ -436,4 +436,4 @@ For issues and questions:
 
 ---
 
-**Built with for ALSO Microsoft Partners**
+**Built for ALSO Microsoft Partners**
