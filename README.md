@@ -436,4 +436,4 @@ For issues and questions:
 
 ---
 
-**Built with ❤️ for Microsoft Partners**
+**Built with for ALSO Microsoft Partners**
