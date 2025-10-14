@@ -1,7 +1,8 @@
 """
-Demo script for testing the Document OCR Agent
+Demo script for testing the Document OCR Agent with Microsoft Agent Framework
 Run this to verify your setup before the live demo
 """
+import asyncio
 import sys
 import os
 from pathlib import Path
@@ -9,7 +10,7 @@ from pathlib import Path
 # Add agent to path
 sys.path.insert(0, str(Path(__file__).parent / "agent"))
 
-from ocr_agent import create_ocr_agent_from_env
+from ocr_agent import create_ocr_agent_from_env, setup_observability
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -83,19 +84,25 @@ def create_sample_invoice():
     return img
 
 
-def test_agent_setup():
-    """Test agent initialization"""
-    print("=" * 60)
-    print("Azure AI Document OCR Agent - Demo Test")
-    print("=" * 60)
+async def test_agent_setup():
+    """Test agent initialization and functionality"""
+    print("=" * 70)
+    print("Azure AI Document OCR Agent - Demo Test (Agent Framework)")
+    print("=" * 70)
     print()
     
     try:
+        print("🔧 Setting up OpenTelemetry observability...")
+        setup_observability()
+        print("   ✅ Observability configured")
+        print("   📊 Traces will be sent to AI Toolkit (http://localhost:4317)")
+        print()
+        
         print("1️⃣  Testing agent initialization...")
-        agent = create_ocr_agent_from_env()
-        print("   ✅ Agent initialized successfully")
-        print(f"   Model: {agent.model_name}")
-        print(f"   Endpoint: {agent.endpoint[:50]}...")
+        agent = await create_ocr_agent_from_env()
+        print("   ✅ Agent Framework agent initialized successfully")
+        print(f"   🧠 Using Mistral OCR: {agent.mistral_model_name}")
+        print(f"   🔗 Endpoint: {agent.mistral_endpoint[:50]}...")
         print()
         
         # Create test documents directory
@@ -109,42 +116,78 @@ def test_agent_setup():
         print(f"   ✅ Sample invoice saved to: {invoice_path}")
         print()
         
-        print("3️⃣  Processing document with OCR...")
-        result = agent.process_document(str(invoice_path))
-        print("   ✅ Document processed successfully")
+        print("3️⃣  Testing agent chat functionality...")
+        chat_response = await agent.chat("Hello! Can you explain what you can help me with?")
+        print(f"   ✅ Agent response: {chat_response[:100]}...")
         print()
         
-        print("4️⃣  Results:")
-        print("-" * 60)
-        print("📊 Metrics:")
-        print(f"   Prompt tokens: {result['tokens_used']['prompt']}")
-        print(f"   Completion tokens: {result['tokens_used']['completion']}")
-        print(f"   Total tokens: {result['tokens_used']['total']}")
+        print("4️⃣  Processing document with OCR tool...")
+        ocr_message = f"Please extract all text from this invoice image and format it as markdown: {invoice_path}"
+        result = await agent.process_document(ocr_message, str(invoice_path))
+        print("   ✅ Document processed successfully with Agent Framework")
         print()
-        print("📝 Extracted Markdown (first 500 chars):")
-        print("-" * 60)
-        print(result['markdown'][:500])
-        if len(result['markdown']) > 500:
+        
+        print("5️⃣  Testing direct OCR tool functionality...")
+        # Test the underlying OCR tool directly
+        direct_result = await agent.ocr_tool.extract_text_from_image(
+            str(invoice_path),
+            extract_tables=True,
+            preserve_formatting=True
+        )
+        print("   ✅ Direct OCR tool test successful")
+        print()
+        
+        print("6️⃣  Results:")
+        print("-" * 70)
+        print("🤖 Agent Framework Response:")
+        print(f"   Length: {len(result)} characters")
+        print("   Preview:")
+        print(f"   {result[:200]}...")
+        print()
+        print("📝 Direct OCR Result (first 500 chars):")
+        print("-" * 70)
+        print(direct_result[:500])
+        if len(direct_result) > 500:
             print("...")
-            print(f"   (Total length: {len(result['markdown'])} characters)")
-        print("-" * 60)
+            print(f"   (Total length: {len(direct_result)} characters)")
+        print("-" * 70)
         print()
         
-        # Save full result
-        output_path = test_dir / "sample_invoice_result.md"
-        with open(output_path, 'w') as f:
-            f.write(result['markdown'])
-        print(f"5️⃣  Full result saved to: {output_path}")
+        # Save results
+        agent_output_path = test_dir / "sample_invoice_agent_result.md"
+        with open(agent_output_path, 'w', encoding='utf-8') as f:
+            f.write(f"# Agent Framework Result\n\n{result}\n\n")
+        
+        direct_output_path = test_dir / "sample_invoice_direct_result.md"
+        with open(direct_output_path, 'w', encoding='utf-8') as f:
+            f.write(f"# Direct OCR Tool Result\n\n{direct_result}\n\n")
+        
+        print(f"7️⃣  Results saved:")
+        print(f"   📄 Agent result: {agent_output_path}")
+        print(f"   📄 Direct OCR result: {direct_output_path}")
         print()
         
-        print("=" * 60)
-        print("✅ All tests passed! Your setup is ready for the demo.")
-        print("=" * 60)
+        print("8️⃣  Testing multi-turn conversation...")
+        follow_up = await agent.chat("Can you summarize the key information from that invoice?")
+        print(f"   ✅ Follow-up response: {follow_up[:100]}...")
         print()
-        print("Next steps:")
+        
+        print("=" * 70)
+        print("✅ All tests passed! Your Agent Framework setup is ready for the demo.")
+        print("=" * 70)
+        print()
+        print("🎯 Key Features Verified:")
+        print("  ✓ Microsoft Agent Framework integration")
+        print("  ✓ Mistral OCR tool functionality")
+        print("  ✓ OpenTelemetry tracing")
+        print("  ✓ Multi-turn conversations")
+        print("  ✓ Document processing pipeline")
+        print()
+        print("🚀 Next steps:")
         print("1. Review the extracted markdown in test_documents/")
-        print("2. Test with your own documents")
-        print("3. Run the Streamlit app: streamlit run app.py")
+        print("2. Open AI Toolkit to view traces: http://localhost:8080")
+        print("3. Test with your own documents")
+        print("4. Run the Streamlit app: streamlit run app.py")
         print()
         
         return True
@@ -155,20 +198,27 @@ def test_agent_setup():
         print("Make sure your .env file exists and contains:")
         print("  - MISTRAL_OCR_ENDPOINT")
         print("  - MISTRAL_OCR_KEY")
-        print("  - MISTRAL_OCR_MODEL_NAME")
+        print("  - MISTRAL_OCR_MODEL_NAME (optional)")
         return False
         
     except Exception as e:
         print(f"❌ Error during testing: {str(e)}")
+        print(f"❌ Error type: {type(e).__name__}")
+        import traceback
+        print("❌ Traceback:")
+        traceback.print_exc()
         print()
-        print("Troubleshooting:")
+        print("🔧 Troubleshooting:")
         print("1. Check your .env file configuration")
         print("2. Verify Mistral OCR model is deployed in Azure AI Foundry")
         print("3. Ensure API endpoint is accessible")
         print("4. Check API key is valid")
+        print("5. Verify Agent Framework is installed: pip install agent-framework[azure] --pre")
+        print("6. Make sure Azure CLI is authenticated: az login")
         return False
 
 
 if __name__ == "__main__":
-    success = test_agent_setup()
+    # Run the async demo
+    success = asyncio.run(test_agent_setup())
     sys.exit(0 if success else 1)

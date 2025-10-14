@@ -4,7 +4,9 @@ azure-identity==1.19.0
 azure-ai-inference==1.0.0b5
 
 # Microsoft Agent Framework
-semantic-kernel==1.12.0
+agent-framework[azure] --pre
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
 
 # UI
 streamlit==1.39.0

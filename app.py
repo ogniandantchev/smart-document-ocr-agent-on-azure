@@ -1,22 +1,24 @@
 """
-Streamlit UI for Document OCR Agent
+Streamlit UI for Document OCR Agent with Microsoft Agent Framework
 """
 import streamlit as st
 from PIL import Image
 import io
+import asyncio
 from datetime import datetime
 import sys
 import os
+import tempfile
 
 # Add agent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'agent'))
 
-from ocr_agent import create_ocr_agent_from_env, DocumentOCRAgent
+from ocr_agent import create_ocr_agent_from_env, DocumentOCRAgent, setup_observability
 
 
 # Page configuration
 st.set_page_config(
-    page_title="Azure AI Document OCR Agent",
+    page_title="Azure AI Document OCR Agent (Agent Framework)",
     page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -49,33 +51,99 @@ st.markdown("""
         border-radius: 0.5rem;
         margin: 1rem 0;
     }
+    .agent-framework-badge {
+        background: linear-gradient(45deg, #0078D4, #106EBE);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: bold;
+        display: inline-block;
+        margin: 0.5rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 
+@st.cache_resource
 def initialize_agent():
-    """Initialize the OCR agent"""
+    """Initialize the OCR agent (cached)"""
     try:
-        if 'agent' not in st.session_state:
-            with st.spinner("Initializing Azure AI Agent..."):
-                st.session_state.agent = create_ocr_agent_from_env()
-                st.session_state.agent_initialized = True
-        return st.session_state.agent
-    except Exception as e:
-        st.error(f"Failed to initialize agent: {str(e)}")
-        st.info("Please ensure your .env file is configured correctly with Azure credentials.")
-        return None
-
-
-def process_uploaded_file(uploaded_file, agent, extract_tables, preserve_formatting):
-    """Process the uploaded file with OCR"""
-    try:
-        # Read image
-        image = Image.open(uploaded_file)
+        # Set up observability
+        setup_observability()
         
-        # Convert to RGB if necessary
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
+        # Create agent using async function
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        agent = loop.run_until_complete(create_ocr_agent_from_env())
+        return agent, None
+    except Exception as e:
+        return None, str(e)
+
+
+async def process_uploaded_file_async(image_path, agent, extract_tables, preserve_formatting, custom_instructions):
+    """Process the uploaded file with OCR using Agent Framework"""
+    try:
+        # Create the message for the agent
+        if custom_instructions:
+            message = f"""Please extract text from this document image and format it as markdown.
+            
+Custom instructions: {custom_instructions}
+
+Settings:
+- Extract tables: {extract_tables}
+- Preserve formatting: {preserve_formatting}
+
+Image path: {image_path}"""
+        else:
+            message = f"""Please extract text from this document image and format it as markdown.
+
+Settings:
+- Extract tables: {extract_tables}
+- Preserve formatting: {preserve_formatting}
+
+Image path: {image_path}"""
+        
+        # Process with the agent
+        result = await agent.process_document(message, image_path)
+        
+        # Also get direct OCR result for comparison
+        direct_result = await agent.ocr_tool.extract_text_from_image(
+            image_path,
+            extract_tables=extract_tables,
+            preserve_formatting=preserve_formatting,
+            custom_instructions=custom_instructions
+        )
+        
+        return {
+            "agent_response": result,
+            "direct_ocr": direct_result,
+            "success": True
+        }
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "success": False
+        }
+
+
+def process_uploaded_file(uploaded_file, agent, extract_tables, preserve_formatting, custom_instructions):
+    """Synchronous wrapper for async processing"""
+    try:
+        # Save uploaded file to temporary location
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
+            # Read image
+            image = Image.open(uploaded_file)
+            
+            # Convert to RGB if necessary
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Save to temporary file
+            image.save(tmp_file.name, format='PNG')
+            image_path = tmp_file.name
         
         # Display the uploaded image
         col1, col2 = st.columns([1, 1])
@@ -85,35 +153,49 @@ def process_uploaded_file(uploaded_file, agent, extract_tables, preserve_formatt
             st.image(image, use_container_width=True)
         
         with col2:
-            st.subheader("⚙️ Processing...")
+            st.subheader("⚙️ Processing with Agent Framework...")
             
             # Create progress placeholder
             progress_bar = st.progress(0)
             status_text = st.empty()
             
             # Process document
-            status_text.text("Extracting text with Mistral OCR...")
-            progress_bar.progress(30)
+            status_text.text("🤖 Initializing Agent Framework...")
+            progress_bar.progress(20)
             
-            result = agent.process_document(
-                image,
-                extract_tables=extract_tables,
-                preserve_formatting=preserve_formatting
+            status_text.text("🧠 Processing with Mistral OCR tool...")
+            progress_bar.progress(50)
+            
+            # Run async processing
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            result = loop.run_until_complete(
+                process_uploaded_file_async(
+                    image_path, agent, extract_tables, 
+                    preserve_formatting, custom_instructions
+                )
             )
             
             progress_bar.progress(100)
-            status_text.text("✅ Processing complete!")
             
-            # Display metrics
-            st.markdown("### 📊 Processing Metrics")
-            metric_col1, metric_col2, metric_col3 = st.columns(3)
-            
-            with metric_col1:
-                st.metric("Prompt Tokens", result["tokens_used"]["prompt"])
-            with metric_col2:
-                st.metric("Completion Tokens", result["tokens_used"]["completion"])
-            with metric_col3:
-                st.metric("Total Tokens", result["tokens_used"]["total"])
+            if result["success"]:
+                status_text.text("✅ Processing complete!")
+                
+                # Display agent info
+                st.markdown("### 🤖 Agent Framework Info")
+                st.markdown('<div class="agent-framework-badge">Microsoft Agent Framework</div>', unsafe_allow_html=True)
+                st.info(f"**Agent:** {agent.__class__.__name__}\n**Model:** {agent.mistral_model_name}")
+            else:
+                status_text.text("❌ Processing failed!")
+                st.error(f"Error: {result['error']}")
+                return None
+        
+        # Cleanup
+        try:
+            os.unlink(image_path)
+        except:
+            pass
         
         return result
         
@@ -128,7 +210,7 @@ def main():
     # Header
     st.markdown('<div class="main-header">📄 Azure AI Document OCR Agent</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="subheader">Powered by Mistral OCR on Azure AI Foundry</div>',
+        '<div class="subheader">Powered by Microsoft Agent Framework + Mistral OCR</div>',
         unsafe_allow_html=True
     )
     
@@ -138,22 +220,42 @@ def main():
         st.markdown("## ⚙️ Configuration")
         
         # OCR Options
-        st.markdown("### OCR Options")
+        st.markdown("### 📝 OCR Options")
         extract_tables = st.checkbox("Extract Tables", value=True, help="Format tables in markdown")
         preserve_formatting = st.checkbox("Preserve Formatting", value=True, help="Maintain document structure")
+        
+        # Custom instructions
+        custom_instructions = st.text_area(
+            "Custom Instructions", 
+            placeholder="Optional: Add specific instructions for text extraction...",
+            help="Provide additional context or requirements for the OCR process"
+        )
+        
+        st.markdown("---")
+        
+        # Observability
+        st.markdown("### 📊 Observability")
+        if st.button("🔍 Open AI Toolkit Tracing"):
+            st.markdown("Open [AI Toolkit Tracing](http://localhost:8080) in a new tab")
+        
+        st.info("OpenTelemetry traces are being sent to AI Toolkit for Visual Studio Code")
         
         st.markdown("---")
         
         # Agent Info
         st.markdown("### 🤖 Agent Information")
         st.info("""
-        **Model:** Mistral OCR 2503
+        **Framework:** Microsoft Agent Framework
+        
+        **OCR Model:** Mistral OCR 2503
         
         **Capabilities:**
         - High-accuracy text extraction
         - Table detection & formatting
         - Multi-language support
         - Layout preservation
+        - Conversational interface
+        - Tool-based architecture
         """)
         
         st.markdown("---")
@@ -161,19 +263,29 @@ def main():
         # About
         st.markdown("### ℹ️ About")
         st.markdown("""
-        This demo showcases Azure AI Agent Service with:
+        This demo showcases:
+        - **Microsoft Agent Framework** for AI orchestration
         - **Azure AI Foundry** for model deployment
-        - **Mistral OCR** for document processing
-        - **Microsoft Agent Framework** for orchestration
+        - **Mistral OCR** as an agent tool
+        - **OpenTelemetry** for observability
         - **Pulumi** for infrastructure as code
         """)
     
     # Initialize agent
-    agent = initialize_agent()
+    agent, error = initialize_agent()
     
     if agent is None:
-        st.warning("⚠️ Agent not initialized. Please check your configuration.")
+        st.error(f"⚠️ Failed to initialize Agent Framework: {error}")
+        st.info("""
+        Please ensure:
+        1. Your .env file contains MISTRAL_OCR_ENDPOINT and MISTRAL_OCR_KEY
+        2. Agent Framework is installed: `pip install agent-framework[azure] --pre`
+        3. Azure CLI is authenticated: `az login`
+        """)
         return
+    
+    # Success message
+    st.success("✅ Agent Framework initialized successfully!")
     
     # Main content area
     st.markdown("## 📤 Upload Document")
@@ -187,86 +299,147 @@ def main():
     
     if uploaded_file is not None:
         # Process the document
-        result = process_uploaded_file(uploaded_file, agent, extract_tables, preserve_formatting)
+        result = process_uploaded_file(
+            uploaded_file, agent, extract_tables, 
+            preserve_formatting, custom_instructions
+        )
         
-        if result:
+        if result and result.get("success"):
             st.markdown("---")
-            st.markdown("## 📝 Extracted Markdown")
+            st.markdown("## 📝 Results")
             
             # Create tabs for different views
-            tab1, tab2 = st.tabs(["📄 Rendered Markdown", "💾 Raw Markdown"])
+            tab1, tab2, tab3 = st.tabs(["🤖 Agent Response", "📄 Direct OCR", "💾 Raw Output"])
             
             with tab1:
-                # Display rendered markdown
-                st.markdown(result["markdown"])
+                st.markdown("### Agent Framework Response")
+                st.markdown("*This is the full response from the Agent Framework, which may include additional context and formatting:*")
+                st.markdown(result["agent_response"])
             
             with tab2:
-                # Display raw markdown with copy button
-                st.code(result["markdown"], language="markdown")
+                st.markdown("### Direct OCR Tool Output")
+                st.markdown("*This is the direct output from the Mistral OCR tool:*")
+                st.markdown(result["direct_ocr"])
             
-            # Download button
+            with tab3:
+                st.markdown("### Raw Outputs")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**Agent Response (Raw)**")
+                    st.code(result["agent_response"], language="markdown")
+                
+                with col2:
+                    st.markdown("**OCR Tool (Raw)**")
+                    st.code(result["direct_ocr"], language="markdown")
+            
+            # Download section
             st.markdown("---")
             st.markdown("## 💾 Download Results")
             
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
             with col1:
-                # Download as markdown file
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"ocr_result_{timestamp}.md"
-                
+                # Download agent response
+                agent_filename = f"agent_response_{timestamp}.md"
                 st.download_button(
-                    label="📥 Download Markdown",
-                    data=result["markdown"],
-                    file_name=filename,
+                    label="📥 Download Agent Response",
+                    data=result["agent_response"],
+                    file_name=agent_filename,
                     mime="text/markdown",
                     use_container_width=True
                 )
             
             with col2:
-                # Download as text file
-                txt_filename = f"ocr_result_{timestamp}.txt"
-                
+                # Download OCR result
+                ocr_filename = f"ocr_result_{timestamp}.md"
                 st.download_button(
-                    label="📥 Download Text",
-                    data=result["markdown"],
-                    file_name=txt_filename,
-                    mime="text/plain",
+                    label="📥 Download OCR Result",
+                    data=result["direct_ocr"],
+                    file_name=ocr_filename,
+                    mime="text/markdown",
+                    use_container_width=True
+                )
+            
+            with col3:
+                # Download combined
+                combined_content = f"# Agent Framework Response\n\n{result['agent_response']}\n\n---\n\n# Direct OCR Tool Result\n\n{result['direct_ocr']}"
+                combined_filename = f"combined_results_{timestamp}.md"
+                st.download_button(
+                    label="📥 Download Combined",
+                    data=combined_content,
+                    file_name=combined_filename,
+                    mime="text/markdown",
                     use_container_width=True
                 )
     
     else:
         # Show example/placeholder
-        st.info("👆 Upload a document image to get started")
+        st.info("👆 Upload a document image to get started with the Agent Framework")
         
         # Example showcase
-        st.markdown("### 📋 Example Use Cases")
+        st.markdown("### 📋 Agent Framework Features")
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
             st.markdown("""
-            **📄 Invoices**
-            - Extract line items
-            - Capture totals
-            - Preserve tables
+            **🤖 Intelligent Agent**
+            - Conversational interface
+            - Context awareness
+            - Tool orchestration
+            - Multi-turn conversations
             """)
         
         with col2:
             st.markdown("""
-            **📋 Forms**
-            - Field extraction
-            - Checkbox detection
-            - Structure preservation
+            **� OCR Tool Integration**
+            - Mistral OCR as agent tool
+            - Flexible processing options
+            - Custom instructions
+            - Error handling
             """)
         
         with col3:
             st.markdown("""
-            **📑 Reports**
-            - Full text extraction
-            - Header hierarchy
-            - Multi-column layouts
+            **� Observability**
+            - OpenTelemetry tracing
+            - AI Toolkit integration
+            - Performance monitoring
+            - Debug insights
             """)
+        
+        # Chat interface
+        st.markdown("---")
+        st.markdown("## 💬 Chat with the Agent")
+        
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
+        
+        # Chat input
+        user_message = st.chat_input("Ask the agent about OCR capabilities or document processing...")
+        
+        if user_message:
+            # Add user message to history
+            st.session_state.chat_history.append({"role": "user", "content": user_message})
+            
+            # Get agent response
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                agent_response = loop.run_until_complete(agent.chat(user_message))
+                st.session_state.chat_history.append({"role": "assistant", "content": agent_response})
+            except Exception as e:
+                st.error(f"Error getting agent response: {e}")
+        
+        # Display chat history
+        for message in st.session_state.chat_history:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
 
 
 if __name__ == "__main__":
