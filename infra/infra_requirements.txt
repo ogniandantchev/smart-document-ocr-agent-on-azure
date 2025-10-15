@@ -1,5 +1,0 @@
-# Pulumi Infrastructure Dependencies
-pulumi==3.136.1
-pulumi-azure-native==2.58.0
-pulumi-azuread==5.53.5
-python-dotenv==1.0.1
