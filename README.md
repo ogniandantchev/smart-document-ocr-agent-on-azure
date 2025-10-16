@@ -1,6 +1,6 @@
-# Simple Mistral OCR# Azure AI Document OCR Agent
+# Simple Mistral OCR
 
-A clean, minimal implementation for document OCR using Mistral OCR model deployed on a dedicated Azure endpoint.A production-ready Azure AI Agent for document OCR using Mistral OCR, built with Azure AI Foundry, Microsoft Agent Framework, and Streamlit.
+A clean, minimal implementation for document OCR using Mistral OCR model deployed on a dedicated Azure endpoint.A production-ready Azure AI Agent for document OCR using Mistral OCR and Streamlit.
 
 ## 🏗️ Architecture
 
@@ -15,5 +15,6 @@ A clean, minimal implementation for document OCR using Mistral OCR model deploye
 
 - Python 3.8+
 - Mistral OCR model endpoint and API key
+
 
 
